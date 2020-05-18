@@ -16,7 +16,12 @@ assert cv2.__version__[0] == '3'  # The fisheye module requires opencv version >
 class FisheyeCameraCalibration(object):
 
     def __init__(self, K=np.zeros((3, 3)), D=np.zeros((4, 1)), verbose=False):
-
+        """
+        Default constructor
+        :param K: camera Matrix
+        :param D: vector of distortion parameters
+        :param verbose: Set level of logging
+        """
         if verbose:
             logging.basicConfig(level=logging.DEBUG)
         else:
@@ -35,9 +40,13 @@ class FisheyeCameraCalibration(object):
         logging.debug("Fisheye camera calibration class initialized.")
 
     def detect_corners(self, checkerboard: (int, int)=(6, 8)):
-
+        """
+        Detect corners of the checkerboard
+        :param checkerboard: size of the checkerboard
+        :return:
+        """
         logging.debug("Corner detection in calibration images started.")
-        assert len(self.calibration_images) == 0, "Calibration images must be loaded first."
+        assert len(self.calibration_images) != 0, "Calibration images must be loaded first."
 
         subpix_criteria = (cv2.TERM_CRITERIA_EPS + cv2.TERM_CRITERIA_MAX_ITER, 30, 0.1)
 
@@ -58,13 +67,19 @@ class FisheyeCameraCalibration(object):
                 self.imgpoints.append(corners)
 
         logging.debug("Found " + str(len(self.objpoints)) + " valid images for calibration")
-        logging.debug("Dimension of calibration images is: %s" % self._img_shape[::-1])
+        logging.debug("Dimension of calibration images is: %s" % str(self._img_shape[::-1]))
 
         return self.imgpoints
 
     def calibrate(self, calibration_flags=cv2.fisheye.CALIB_CHECK_COND + cv2.fisheye.CALIB_FIX_SKEW,
                   checkerboard: (int, int) = (6, 8)):
-
+        """
+        Calibrate camera model using calibration images
+        :param calibration_flags: flags to use for calibration, see documentation of opencv
+                                  https://docs.opencv.org/3.4/db/d58/group__calib3d__fisheye.html
+        :param checkerboard: size of the checkerboard
+        :return:
+        """
         logging.debug("Calibration started.")
 
         self.detect_corners(checkerboard)
@@ -91,7 +106,14 @@ class FisheyeCameraCalibration(object):
         logging.info("D=np.array( %s )" % str(self.D.tolist()))
 
     def draw_indexes_of_corners(self, img: np.ndarray, corners: list, show_image: bool = False, save_path: str = None):
-        # print corner indexes into image
+        """
+        Write indexes of the detected corners of chessboard into the image. Helps with debugging.
+        :param img: image with chessboard
+        :param corners: detected corners
+        :param show_image: flag to show image
+        :param save_path: filename to save image with corners
+        :return:
+        """
         logging.debug("Drawing indexes of corners to the image.")
 
         font = cv2.FONT_HERSHEY_SIMPLEX
@@ -105,7 +127,11 @@ class FisheyeCameraCalibration(object):
             cv2.imshow("corners", img)
 
     def save_parameters(self, root_dir: str):
-
+        """
+        Save calibration parameters to the file
+        :param root_dir: path to folder to save parameter matrices
+        :return:
+        """
         os.makedirs(root_dir, exist_ok=True)  # create root dir of not exist
 
         # save parameter matrices
@@ -113,18 +139,21 @@ class FisheyeCameraCalibration(object):
         np.save(os.path.join(root_dir, "D.npy"), self.D)
 
     def set_parameters(self, K: np.ndarray, D: np.ndarray):
+        """
+        Set distorsion parameters K and D
+        :param K: camera matrix K
+        :param D: vector of distortion parameters D
+        :return:
+        """
         self.K = K
         self.D = D
 
-    def undistort(self, image: Union[np.ndarray, str], result_crop: str="valid", save_path=None, show_image=False,
-                  balance=0.0):
+    def undistort(self, image: Union[np.ndarray, str], result_crop: str="valid", balance=0.0):
         """
         Undistort image using parameter matrices K and D
         :param image: image or path to the image
         :param result_crop - one of 'valid' or 'full', specify the resolution of the output image ('valid' means center
                              of the image without deformation of the borders)
-        :param save_path - path to save undisorted image, not save if None
-        :param show_image - show undistorted image
         :param balance - need to be specified if using 'full' result crop, means size of the crop (0.0 is like 'valid')
         :return: undistorted image
         """
@@ -141,17 +170,15 @@ class FisheyeCameraCalibration(object):
         else:
             undistorted_img = self._undistort_valid(img)
 
-        if save_path:
-            logging.info("Saving undistorted image to  %s." % save_path)
-            cv2.imwrite(save_path, undistorted_img)
-        if show_image:
-            logging.info("Showing undistorted image.")
-            cv2.imshow("undistorted_image", undistorted_img)
-
+        logging.info("Returning undistorted image.")
         return undistorted_img
 
     def _undistort_valid(self, img: np.ndarray):
-
+        """
+        Undistort image with a valid crop
+        :param img: image to undistort
+        :return: undistorted image
+        """
         map1, map2 = cv2.fisheye.initUndistortRectifyMap(self.K, self.D, np.eye(3),
                                                          self.K, self._img_shape, cv2.CV_16SC2)
 
@@ -160,7 +187,13 @@ class FisheyeCameraCalibration(object):
         return undistorted_img
 
     def _undistort_full(self, img: np.ndarray, balance: float=0.0):
-
+        """
+        Undistort whole image
+        :param img: image to undistort
+        :param balance: Sets the new focal length in range between the min focal length and the max focal
+    .                   length. Balance is in range of [0, 1].
+        :return: undistorted image
+        """
         dim1 = img.shape[:2][::-1]  # dim1 is the dimension of input image to un-distort
         assert dim1[0] / dim1[1] == self._img_shape[0] / self._img_shape[1],\
                "Image to un-distort needs to have same aspect ratio as the ones used in calibration"
@@ -174,15 +207,6 @@ class FisheyeCameraCalibration(object):
         undistorted_img = cv2.remap(img, map1, map2, interpolation=cv2.INTER_LINEAR, borderMode=cv2.BORDER_CONSTANT)
 
         return undistorted_img
-
-    def distort(self, image: np.ndarray):
-
-        if isinstance(image, str):
-            pass
-        elif isinstance(np.ndarray, image):
-            pass
-        else:
-            logging.error("Parameter must be an image or path to the image.")
 
     def load_calibration_images(self, image_dir: str):
         """
